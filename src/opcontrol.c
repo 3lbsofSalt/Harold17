@@ -123,7 +123,7 @@ void operatorControl() {
 
 		lcdPrint(uart1, 2, "X: %d", xAxis);
 
-		if(joyControl == 3 || joyControl == 2 || joyControl == 1){
+		if(joyControl == 3 || joyControl == 2 || joyControl == 1 || joyControl != 0){
 			if(abs(xAxis) >= deadzone || abs(yAxis) >= deadzone){
 				if(xAxis > deadzone && !(joyControl == 1)){
 					motorSet(leftBack, -xAxis - yAxis);
@@ -165,7 +165,7 @@ void operatorControl() {
 			motorSet(leftLaunch1, 127);
 			motorSet(leftLaunch2, -127);
 			motorSet(leftLaunch3, 127);
-			delay(500);
+			while (digitalRead(launcherPosIn) == LOW){}
 		} else if(joystickGetDigital(1, 5, JOY_DOWN)){
 			motorSet(rightLaunch1, 0);
 			motorSet(rightLaunch2, 0);
