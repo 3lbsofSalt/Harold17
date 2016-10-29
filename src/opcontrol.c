@@ -58,17 +58,18 @@ void operatorControl() {
 	lcdInit(uart1);
 	lcdSetBacklight(uart1, true);
 
-	if(!bEnc){
-		bEnc = encoderInit(2, 3, 1);
+	if(!bEnc){							//If autonomous did not initialize back encoder
+		bEnc = encoderInit(2, 3, 1);	//Initialize back Encoder
 	}
-	if(!fEnc){
-		fEnc = encoderInit(4, 5, 1);
+	if(!fEnc){							//If autonomous did not initialize front encoder
+		fEnc = encoderInit(4, 5, 1);	//Initialize front Encoder
 	}
 
-	int deadzone = 20;
+	int deadzone = 20;					//Joystick deadzone
 	int xAxis;
 	int yAxis;
 
+	//Motor Port Constants
 	const int leftBack = 1;
 	const int rightBack = 2;
 	const int leftLaunch1 = 3;
@@ -80,66 +81,78 @@ void operatorControl() {
 	const int rightFront = 9;
 	const int leftFront = 10;
 
+	//Limit Switch Port
 	int launcherPosIn = 1;
+
+
 	//char joyControl = "A";
-	int joyControl = 1;
 	/*
 	 * Joy Control Values are A, F, S defaulting to S
 	 * A is for Arcade mode
 	 * F is for a Forward Strafe Mode
 	 * S is for a Sidways Strafe Mode
 	 */
+	int joyControl = 1;
 
+	//Driver Control Loop
 	while (1) {
 		delay(20);
-		if(joyControl == 1){
+
+		//Gets different xAxis and yAxis values for different drive modes
+		if(joyControl == 1){		//Arcade Mode
 			yAxis = -(joystickGetAnalog(1, 1));
 			xAxis = -(joystickGetAnalog(1, 2));
-		} else if(joyControl == 2){
+		} else if(joyControl == 2){	//Up-Down View Mode
 			xAxis = -(joystickGetAnalog(1, 2));
 			yAxis = joystickGetAnalog(1, 4);
-		} else if(joyControl == 3){
+		} else if(joyControl == 3){	//Side-Side View Mode
 			xAxis = joystickGetAnalog(1, 1);
 			yAxis = joystickGetAnalog(1, 3);
-		} else {
+		} else {					//Default to Arcade
 			xAxis = joystickGetAnalog(1, 1);
 			yAxis = joystickGetAnalog(1, 3);
 		}
 
+		//Change driver control mode with button presses
 		if(joystickGetDigital(1, 8, JOY_UP)){
-			if(joystickGetDigital(1, 8, JOY_RIGHT)){
-				joyControl = 3; //S
+			if(joystickGetDigital(1, 8, JOY_RIGHT)){ 	//Up and Right Buttons on Right Buttons
+				joyControl = 3; //S; Side-Side View
 			}
-			if(joystickGetDigital(1, 8, JOY_LEFT)){
-				joyControl = 2; //F
+			if(joystickGetDigital(1, 8, JOY_LEFT)){ 	//Up and Left Buttons on Right Buttons
+				joyControl = 2; //F; Up-Down View
 			}
-			if(joystickGetDigital(1, 8, JOY_DOWN)){
-				joyControl = 1; //A
+			if(joystickGetDigital(1, 8, JOY_DOWN)){		//Up and Down Buttons on Right Buttons
+				joyControl = 1; //A; Arcade Mode
 			}
 		}
 
-
-
-
-		lcdPrint(uart1, 2, "X: %d", xAxis);
-
+		//////////////////////////////////////////////
+		//											//
+		//		   Drive Control Statements			//
+		//											//
+		//////////////////////////////////////////////
 		if(joyControl == 3 || joyControl == 2 || joyControl == 1 || joyControl != 0){
+			//If joystick is pressed out of deadzone
 			if(abs(xAxis) >= deadzone || abs(yAxis) >= deadzone){
+				//Runs Right in SS mode and Up in UD mode
 				if(xAxis > deadzone && !(joyControl == 1)){
 					motorSet(leftBack, -xAxis - yAxis);
 					motorSet(rightBack, -xAxis - yAxis);
 					motorSet(leftFront, xAxis - yAxis);
 					motorSet(rightFront, xAxis - yAxis);
+				//Runs Left in SS mode and Down in UD mode
 				} else if(xAxis < -deadzone && !(joyControl == 1)){
 					motorSet(leftBack, -xAxis + yAxis);
 					motorSet(rightBack, -xAxis + yAxis);
 					motorSet(leftFront, xAxis + yAxis);
 					motorSet(rightFront, xAxis + yAxis);
+				//Runs arcade mode
 				} else if(((abs(xAxis) > deadzone || abs(yAxis) > deadzone) && joyControl == 1)) {
 					motorSet(leftBack, -xAxis - yAxis);
 					motorSet(rightBack, -xAxis - yAxis);
 					motorSet(leftFront, xAxis - yAxis);
 					motorSet(rightFront, xAxis - yAxis);
+				//Runs Up/Down in SS and Left/Right in UD
 				} else {
 					if(!(joyControl == 1)){
 						motorSet(leftBack, yAxis);
@@ -148,16 +161,26 @@ void operatorControl() {
 						motorSet(rightFront, yAxis);
 					}
 				}
+			//If controller not out of deadzone stop motors
 			} else {
 				motorSet(leftBack, 0);
 				motorSet(rightBack, 0);
 				motorSet(leftFront, 0);
 				motorSet(rightFront, 0);
 			}
+		//Extra slot for another drive mode
 		} else if (joyControl == 0) {
 
 		}
 
+
+		//////////////////////////////////////
+		//									//
+		//	 	 Launcher Statements 		//
+		//									//
+		//////////////////////////////////////
+
+		//Start launcher when pressing up on left shoulder buttons
 		if(joystickGetDigital(1, 5, JOY_UP)){
 			motorSet(rightLaunch1, -127);
 			motorSet(rightLaunch2, 127);
@@ -165,7 +188,15 @@ void operatorControl() {
 			motorSet(leftLaunch1, 127);
 			motorSet(leftLaunch2, -127);
 			motorSet(leftLaunch3, 127);
-			while (digitalRead(launcherPosIn) == LOW){}
+			//Continues launch if motors are started while laucher is down
+			while (digitalRead(launcherPosIn) == LOW){
+				//Breaks loop in case of driver stop
+				if(joystickGetDigital(1, 5, JOY_DOWN)){
+					break;
+				}
+			}
+
+		//Stop laucher when pressing down on left shoulder buttons
 		} else if(joystickGetDigital(1, 5, JOY_DOWN)){
 			motorSet(rightLaunch1, 0);
 			motorSet(rightLaunch2, 0);
@@ -174,6 +205,8 @@ void operatorControl() {
 			motorSet(leftLaunch2, 0);
 			motorSet(leftLaunch3, 0);
 		}
+
+		//If launcher pushes limit switch down stop the laucher to prepare for next launch
 		if(digitalRead(launcherPosIn) == LOW){
 			motorSet(rightLaunch1, 0);
 			motorSet(rightLaunch2, 0);
@@ -183,15 +216,19 @@ void operatorControl() {
 			motorSet(leftLaunch3, 0);
 		}
 
-		lcdPrint(uart1, 1, "F: %d", encoderGet(fEnc));
-		lcdPrint(uart1, 2, "B: %d", encoderGet(bEnc));
-
+		//////////////////////////////////////
+		//									//
+		//			Extra Features			//
+		//			 						//
+		//////////////////////////////////////
 		if(joystickGetDigital(1, 7, JOY_UP)){
-			if(joystickGetDigital(1, 7, JOY_RIGHT)){
+			if(joystickGetDigital(1, 7, JOY_RIGHT)){ //Press up and right on left buttons
+				//Reset encoders
 				encoderReset(fEnc);
 				encoderReset(bEnc);
 			}
-			if(joystickGetDigital(1, 7, JOY_LEFT)){
+			if(joystickGetDigital(1, 7, JOY_LEFT)){ //Press up and left on left buttons
+				//Start autonomous
 				autonomous();
 			}
 		}

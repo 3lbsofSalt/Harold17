@@ -49,12 +49,14 @@
  * so, the robot will await a switch to another mode or disable/enable cycle.
  */
 
-
+//Encoder Globals
 Encoder fEnc;
 Encoder bEnc;
 
+//Limit Switch Constant
 const int launcherPosIn = 1;
 
+//Motor Port Constants
 const int leftBack = 1;     	//+ Forward
 const int rightBack = 2;    	//+ Forward
 const int leftLaunch1 = 3;
@@ -66,12 +68,19 @@ const int rightLaunch1 = 8;
 const int rightFront = 9;		//- Forward
 const int leftFront = 10;		//- Forward
 
+
+//////////////////////////
+// Function Prototypes	//
+//////////////////////////
 void move();
 void launchMove();
 
+
+
+
 void autonomous() {
 
-
+	//Initalize encoders if not already set
 	if(!bEnc){
 		bEnc = encoderInit(2, 3, 1);
 	}
@@ -79,9 +88,11 @@ void autonomous() {
 		fEnc = encoderInit(4, 5, 1);
 	}
 
+	//Reset after initialization
 	encoderReset(bEnc);
 	encoderReset(fEnc);
 
+	//Ready the laucher
 	move(250);
 	launchMove(100, 0);
 }
@@ -97,22 +108,28 @@ void move(int dist, int reverse){
 	encoderReset(bEnc);
 	encoderReset(bEnc);
 
-	if(reverse == 1){
+	//Forward/Reverse statements
+	if(reverse == 1){ 	//Reverse
 		motorSet(leftBack, 110);
 		motorSet(rightBack, 110);
 		motorSet(leftFront, -110);
 		motorSet(rightFront, -110);
-	}else {
+	}else {				//Forward
 		motorSet(leftBack, 110);
 		motorSet(rightBack, 110);
 		motorSet(leftFront, -110);
 		motorSet(rightFront, -110);
 	}
+
+	//Run while distance is being traveled
 	while(1) {
+		//Break waiting Loop when distance is reached
 		if(abs(encoderGet(bEnc)) >= dist && abs(encoderGet(fEnc)) >= dist){
 			break;
 		}
 	}
+
+	//Stop
 	motorSet(leftBack, 0);
 	motorSet(rightBack, 0);
 	motorSet(leftFront, 0);
@@ -128,27 +145,36 @@ void move(int dist, int reverse){
 void launchMove(int dist, int reverse){
 	encoderReset(bEnc);
 	encoderReset(bEnc);
+
+	//Default to not running motors
 	int motorRun = 0;
+
+	//Make sure motors run if distance not traveled
 	if(dist != 0){
 		motorRun = 1;
 	}
 
+	//Launch once
 	motorSet(rightLaunch1, -127);
 	motorSet(rightLaunch2, 127);
 	motorSet(rightLaunch3, -127);
 	motorSet(leftLaunch1, 127);
 	motorSet(leftLaunch2, -127);
 	motorSet(leftLaunch3, 127);
+
+	//1 = Launch is happening
 	int limit = 1;
 
+	//Waiting loop
 	while(1){
-		if(reverse == 1 && dist != 0 && limit != 1){
+		//Start motors once launch has finished
+		if(reverse == 1 && dist != 0 && limit != 1){			//Reverse
 			motorSet(leftBack, 110);
 			motorSet(rightBack, 110);
 			motorSet(leftFront, -110);
 			motorSet(rightFront, -110);
 			motorRun = 1;
-		} else if(reverse == 0 && dist != 0 && limit != 1) {
+		} else if(reverse == 0 && dist != 0 && limit != 1) {	//Forward
 			motorSet(leftBack, 110);
 			motorSet(rightBack, 110);
 			motorSet(leftFront, -110);
@@ -156,6 +182,7 @@ void launchMove(int dist, int reverse){
 			motorRun = 1;
 		}
 
+		//Stop motors once distance is reached
 		if(abs(encoderGet(bEnc)) >= dist && abs(encoderGet(fEnc))){
 			motorSet(leftBack, 0);
 			motorSet(rightBack, 0);
@@ -164,6 +191,8 @@ void launchMove(int dist, int reverse){
 			motorRun = 0;
 			lcdPrint(uart1, 1, "Yes");
 		}
+
+		//Once launch has hit the limit switch stop it
 		if(digitalRead(launcherPosIn) != LOW || limit != 1){ //Limit Switch is not pressed or limit != 1
 			if(digitalRead(launcherPosIn) == LOW){ //Limit Switch is pressed
 				motorSet(rightLaunch1, 0);
@@ -175,6 +204,8 @@ void launchMove(int dist, int reverse){
 			}
 			limit = 0;
 		}
+
+		//Once both have finished break loop and function.
 		if(motorRun != 1 && limit != 1){
 			break;
 		}
