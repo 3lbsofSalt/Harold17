@@ -33,6 +33,7 @@
  */
 
 #include "main.h"
+#include "math.h"
 
 /*
  * Runs the user operator control code. This function will be started in its own task with the
@@ -53,39 +54,48 @@
  */
 Encoder fEnc;
 Encoder bEnc;
+Encoder liftEnc;
+Encoder clawEnc;
+
 
 void operatorControl() {
 	lcdInit(uart1);
 	lcdSetBacklight(uart1, true);
 
+	if(!liftEnc) {
+		liftEnc = encoderInit(6, 7, 0);
+	}
 	if(!bEnc){							//If autonomous did not initialize back encoder
 		bEnc = encoderInit(2, 3, 1);	//Initialize back Encoder
 	}
 	if(!fEnc){							//If autonomous did not initialize front encoder
 		fEnc = encoderInit(4, 5, 1);	//Initialize front Encoder
 	}
+	if(!clawEnc){
+		clawEnc = encoderInit(8, 9, 0);
+	}
+
+	encoderReset(liftEnc);
 
 	int deadzone = 20;					//Joystick deadzone
 	int xAxis;
 	int yAxis;
-
+	int death = 0;
+	int liftspeed = 0;
 	//Motor Port Constants
 	const int leftBack = 1;
-	const int rightBack = 2;
-	const int leftLaunch1 = 3;
-	const int leftLaunch2 = 4;
-	const int leftLaunch3 = 5;
-	const int rightLaunch3 = 6;
-	const int rightLaunch2 = 7;
-	const int rightLaunch1 = 8;
+	const int rightBack = 10;
+	const int leftLiftBot = 3;
+	const int leftLiftTop = 4;
+	const int claw = 5;
+	const int farClaw = 6;
+	const int rightLiftTop = 7;
+	const int rightLiftBot = 8;
 	const int rightFront = 9;
-	const int leftFront = 10;
+	const int leftFront = 2;
 
-	//Limit Switch Port
-	int launcherPosIn = 1;
-
-
-	//char joyControl = "A";
+	float liftHeight = encoderGet(liftEnc);
+	float lift;
 	/*
 	 * Joy Control Values are A, F, S defaulting to S
 	 * A is for Arcade mode
@@ -93,43 +103,20 @@ void operatorControl() {
 	 * S is for a Sidways Strafe Mode
 	 */
 	int joyControl = 1;
-
 	//Driver Control Loop
 	while (1) {
 		delay(20);
 
 		//Gets different xAxis and yAxis values for different drive modes
+
 		if(joyControl == 1){		//Arcade Mode
 			yAxis = -(joystickGetAnalog(1, 1));
 			xAxis = -(joystickGetAnalog(1, 2));
-		} else if(joyControl == 2){	//Up-Down View Mode
-			xAxis = -(joystickGetAnalog(1, 2));
-			yAxis = joystickGetAnalog(1, 4);
-		} else if(joyControl == 3){	//Side-Side View Mode
-			xAxis = joystickGetAnalog(1, 1);
-			yAxis = joystickGetAnalog(1, 3);
-		} else {					//Default to Arcade
-			xAxis = joystickGetAnalog(1, 1);
-			yAxis = joystickGetAnalog(1, 3);
 		}
-
-		//Change driver control mode with button presses
-		if(joystickGetDigital(1, 8, JOY_UP)){
-			if(joystickGetDigital(1, 8, JOY_RIGHT)){ 	//Up and Right Buttons on Right Buttons
-				joyControl = 3; //S; Side-Side View
-			}
-			if(joystickGetDigital(1, 8, JOY_LEFT)){ 	//Up and Left Buttons on Right Buttons
-				joyControl = 2; //F; Up-Down View
-			}
-			if(joystickGetDigital(1, 8, JOY_DOWN)){		//Up and Down Buttons on Right Buttons
-				joyControl = 1; //A; Arcade Mode
-			}
-		}
-
 		//////////////////////////////////////////////
-		//											//
-		//		   Drive Control Statements			//
-		//											//
+		//																					//
+		//		   Drive Control Statements						//
+		//																					//
 		//////////////////////////////////////////////
 		if(joyControl == 3 || joyControl == 2 || joyControl == 1 || joyControl != 0){
 			//If joystick is pressed out of deadzone
@@ -149,8 +136,8 @@ void operatorControl() {
 				//Runs arcade mode
 				} else if(((abs(xAxis) > deadzone || abs(yAxis) > deadzone) && joyControl == 1)) {
 					motorSet(leftBack, -xAxis - yAxis);
-					motorSet(rightBack, -xAxis - yAxis);
-					motorSet(leftFront, xAxis - yAxis);
+					motorSet(rightBack, xAxis - yAxis);
+					motorSet(leftFront, -xAxis - yAxis);
 					motorSet(rightFront, xAxis - yAxis);
 				//Runs Up/Down in SS and Left/Right in UD
 				} else {
@@ -176,50 +163,121 @@ void operatorControl() {
 
 		//////////////////////////////////////
 		//									//
-		//	 	 Launcher Statements 		//
+		//	 	 Lift Statements 			//
 		//									//
 		//////////////////////////////////////
 
-		//Start launcher when pressing up on left shoulder buttons
-		if(joystickGetDigital(1, 5, JOY_UP)){
-			motorSet(rightLaunch1, -127);
-			motorSet(rightLaunch2, 127);
-			motorSet(rightLaunch3, -127);
-			motorSet(leftLaunch1, 127);
-			motorSet(leftLaunch2, -127);
-			motorSet(leftLaunch3, 127);
-			//Continues launch if motors are started while laucher is down
-			while (digitalRead(launcherPosIn) == LOW){
-				//Breaks loop in case of driver stop
-				if(joystickGetDigital(1, 5, JOY_DOWN)){
-					break;
-				}
+		lift = joystickGetAnalog(1, 3);
+		if(abs(lift) > deadzone) {
+			motorSet(leftLiftBot, lift);
+			motorSet(leftLiftTop, lift);
+			motorSet(rightLiftBot, -(lift));
+			motorSet(rightLiftTop, -(lift));
+			liftHeight = encoderGet(liftEnc) -2;
+		} else if(encoderGet(liftEnc) < liftHeight) {
+			motorSet(leftLiftBot, liftspeed);
+			motorSet(leftLiftTop, liftspeed);
+			motorSet(rightLiftBot, -liftspeed);
+			motorSet(rightLiftTop, -liftspeed);
+			death++;
+			if((death % 50 == 0) && liftspeed < 110){
+				liftspeed += 20;
 			}
-
-		//Stop laucher when pressing down on left shoulder buttons
-		} else if(joystickGetDigital(1, 5, JOY_DOWN)){
-			motorSet(rightLaunch1, 0);
-			motorSet(rightLaunch2, 0);
-			motorSet(rightLaunch3, 0);
-			motorSet(leftLaunch1, 0);
-			motorSet(leftLaunch2, 0);
-			motorSet(leftLaunch3, 0);
+		} else {
+			death = 0;
+			liftspeed = 30;
+			motorSet(leftLiftBot, 0);
+			motorSet(leftLiftTop, 0);
+			motorSet(rightLiftBot, 0);
+			motorSet(rightLiftTop, 0);
 		}
 
-		//If launcher pushes limit switch down stop the laucher to prepare for next launch
-		if(digitalRead(launcherPosIn) == LOW){
-			motorSet(rightLaunch1, 0);
-			motorSet(rightLaunch2, 0);
-			motorSet(rightLaunch3, 0);
-			motorSet(leftLaunch1, 0);
-			motorSet(leftLaunch2, 0);
-			motorSet(leftLaunch3, 0);
+
+		if(joystickGetDigital(1, 6, JOY_UP)){ //Open
+			motorSet(claw, 127);
+		} else if(joystickGetDigital(1, 6, JOY_DOWN)){
+			motorSet(claw, -127);
+		} else {
+			motorSet(claw, 0);
 		}
 
+		if(joystickGetDigital(1, 5, JOY_UP)){
+			motorSet(farClaw, -127);
+		} else if(joystickGetDigital(1, 5, JOY_DOWN)) {
+			motorSet(farClaw, 127);
+		} else {
+			motorSet(farClaw, 0);
+		}
+
+		lcdPrint(uart1, 1, "liftspeed: %d", liftspeed);
+		lcdPrint(uart1, 2, "Claw %d", encoderGet(clawEnc));
+
+		//lift is joystick value
+		//liftHeight is where the joystick sets the lift to be
+		//liftspeed is how fast it is lifting
+		//death is a counter for the if statement
+		/*lift = joystickGetAnalog(1, 3);
+
+
+
+		if(abs(lift) > deadzone) {
+			liftHeight += floor((lift/10));
+		}
+1
+		if (encoderGet(liftEnc) < liftHeight) {
+			if(death == 0){
+				death = 1;
+			}
+			motorSet(leftLiftBot, liftspeed);
+			motorSet(leftLiftTop, liftspeed);
+			motorSet(rightLiftBot, -liftspeed);
+			motorSet(rightLiftTop, -liftspeed);
+		} else if(encoderGet(liftEnc) > liftHeight) {
+			if(death == 0){
+				death = 1;
+			}
+			motorSet(leftLiftBot, -liftspeed);
+			motorSet(leftLiftTop, -liftspeed);
+			motorSet(rightLiftBot, liftspeed);
+			motorSet(rightLiftTop, liftspeed);
+		} else {
+			death = 0;
+			liftspeed = 0;
+			motorSet(leftLiftBot, 0);
+			motorSet(leftLiftTop, 0);
+			motorSet(rightLiftBot, 0);
+			motorSet(rightLiftTop, 0);
+		}
+
+		if(death != 0){
+			if((death % 100 == 0) && liftspeed < 130){
+				liftspeed += 10;
+			}
+			death++;
+		}
+
+
+
+		lcdPrint(uart1, 1, "liftspeed: %d", liftHeight);
+		lcdPrint(uart1, 2, "encoderget %d", encoderGet(liftEnc));
+
+		lift = joystickGetAnalog(1, 3);
+		if(abs(lift) > deadzone){
+			motorSet(leftLiftBot, lift/2);
+			motorSet(leftLiftTop, lift/2);
+			motorSet(rightLiftBot, -(lift/2));
+			motorSet(rightLiftTop, -(lift/ 2));
+		} else {
+			motorSet(leftLiftBot, 0);
+			motorSet(leftLiftTop, 0);
+			motorSet(rightLiftBot, 0);
+			motorSet(rightLiftTop, 0);
+		}
+		*/
 		//////////////////////////////////////
 		//									//
 		//			Extra Features			//
-		//			 						//
+		//									//
 		//////////////////////////////////////
 		if(joystickGetDigital(1, 7, JOY_UP)){
 			if(joystickGetDigital(1, 7, JOY_RIGHT)){ //Press up and right on left buttons

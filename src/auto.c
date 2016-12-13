@@ -52,33 +52,39 @@
 //Encoder Globals
 Encoder fEnc;
 Encoder bEnc;
-
+Encoder liftEnc;
+Encoder clawEnc;
 //Limit Switch Constant
 const int launcherPosIn = 1;
 
 //Motor Port Constants
 const int leftBack = 1;     	//+ Forward
 const int rightBack = 2;    	//+ Forward
-const int leftLaunch1 = 3;
-const int leftLaunch2 = 4;
-const int leftLaunch3 = 5;
-const int rightLaunch3 = 6;
-const int rightLaunch2 = 7;
-const int rightLaunch1 = 8;
+const int leftLiftBot = 3;
+const int leftLiftTop = 4;
+const int claw = 5;
+const int farClaw = 6;
+const int rightLiftTop = 7;
+const int rightLiftBot = 8;
 const int rightFront = 9;		//- Forward
 const int leftFront = 10;		//- Forward
 
-
+int death = 0;
+int liftspeed;
+int liftHeight;
 //////////////////////////
 // Function Prototypes	//
 //////////////////////////
 void move();
 void launchMove();
-
-
+void turn();
+void PID();
+void lift();
+void clawControl();
 
 
 void autonomous() {
+
 
 	//Initalize encoders if not already set
 	if(!bEnc){
@@ -87,16 +93,128 @@ void autonomous() {
 	if(!fEnc){
 		fEnc = encoderInit(4, 5, 1);
 	}
+	if(!liftEnc) {
+		liftEnc = encoderInit(6, 7, 0);
+	}
+	if(!clawEnc){
+		clawEnc = encoderInit(8, 9, 0);
+	}
+
+	int liftHeight = encoderGet(liftEnc);
 
 	//Reset after initialization
 	encoderReset(bEnc);
 	encoderReset(fEnc);
 
 	//Ready the laucher
-	move(250);
-	launchMove(100, 0);
+	move(500);
+	move(100, 1);
+	delay(250);
+	move(100, 1);
+	delay(250);
+	lift(50);
+	move(400, 0);
+	lift(535);
+	clawControl(90);
+	move(600);
+	clawControl(70);
 }
 
+/**
+ * Turns Robot
+ *
+ * @param dist is distance in turn
+ * @param dir is direction 1 is left and 0 right default right
+ */
+void turn(int dist, int dir){
+	lcdPrint(uart1, 1, "DA!");
+	encoderReset(bEnc);
+	encoderReset(fEnc);
+	lcdPrint(uart1, 1, "%d", dir);
+	if(dir == 1){
+		motorSet(leftBack, 110);
+		motorSet(rightBack, 110);
+		motorSet(leftFront, 110);
+		motorSet(rightFront, 110);
+	} else if(dir !=  1) {
+		motorSet(leftBack, -110);
+		motorSet(rightBack, -110);
+		motorSet(leftFront, -110);
+		motorSet(rightFront, -110);
+	}
+	while(encoderGet(bEnc) <= dist && encoderGet(fEnc) <= dist){
+		lcdPrint(uart1, 1, "B:%d", encoderGet(bEnc));
+		PID();
+	}
+	motorSet(leftBack, 0);
+	motorSet(rightBack, 0);
+	motorSet(leftFront, 0);
+	motorSet(rightFront, 0);
+}
+
+void clawControl(int wide){
+	if(encoderGet(clawEnc) < wide){
+		motorSet(claw, 127);
+		while(encoderGet(clawEnc) < wide){
+			PID();
+		}
+	} else if (encoderGet(clawEnc) > wide){
+		motorSet(claw, -127);
+		while(encoderGet(clawEnc) > wide){
+			PID();
+		}
+	}
+
+	motorSet(claw, 0);
+
+}
+
+void lift(int height) {
+	liftHeight = height;
+	if(encoderGet(liftEnc) < height){
+		motorSet(leftLiftBot, 127);
+		motorSet(leftLiftBot, 127);
+		motorSet(rightLiftBot, -127);
+		motorSet(rightLiftTop, -127);
+		while(encoderGet(liftEnc) < height){
+
+		}
+	} else if(encoderGet(liftEnc) > height){
+		motorSet(leftLiftBot, -127);
+		motorSet(leftLiftBot, -127);
+		motorSet(rightLiftBot, 127);
+		motorSet(rightLiftTop, 127);
+		while(encoderGet(liftEnc) > height){
+
+		}
+	}
+	motorSet(leftLiftBot, 0);
+	motorSet(leftLiftBot, 0);
+	motorSet(rightLiftBot, 0);
+	motorSet(rightLiftTop, 0);
+}
+
+
+void PID(){
+	int currHeight = encoderGet(liftEnc);
+	if(currHeight < liftHeight){
+		motorSet(leftLiftBot, liftspeed);
+		motorSet(leftLiftTop, liftspeed);
+		motorSet(rightLiftBot, -liftspeed);
+		motorSet(rightLiftTop, -liftspeed);
+		death++;
+		if((death % 50 == 0) && liftspeed < 110){
+			liftspeed += 20;
+		}
+	} else {
+		death = 0;
+		liftspeed = 30;
+		motorSet(leftLiftBot, 0);
+		motorSet(leftLiftTop, 0);
+		motorSet(rightLiftBot, 0);
+		motorSet(rightLiftTop, 0);
+	}
+}
 
 /**
  * Moves the robot forward or reverse for a set distance
@@ -106,14 +224,14 @@ void autonomous() {
  */
 void move(int dist, int reverse){
 	encoderReset(bEnc);
-	encoderReset(bEnc);
+	encoderReset(fEnc);
 
 	//Forward/Reverse statements
 	if(reverse == 1){ 	//Reverse
-		motorSet(leftBack, 110);
-		motorSet(rightBack, 110);
-		motorSet(leftFront, -110);
-		motorSet(rightFront, -110);
+		motorSet(leftBack, -110);
+		motorSet(rightBack, -110);
+		motorSet(leftFront, 110);
+		motorSet(rightFront, 110);
 	}else {				//Forward
 		motorSet(leftBack, 110);
 		motorSet(rightBack, 110);
@@ -123,8 +241,9 @@ void move(int dist, int reverse){
 
 	//Run while distance is being traveled
 	while(1) {
+		PID();
 		//Break waiting Loop when distance is reached
-		if(abs(encoderGet(bEnc)) >= dist && abs(encoderGet(fEnc)) >= dist){
+		if(abs(encoderGet(bEnc)) >= dist || abs(encoderGet(fEnc)) >= dist){
 			break;
 		}
 	}
@@ -134,80 +253,4 @@ void move(int dist, int reverse){
 	motorSet(rightBack, 0);
 	motorSet(leftFront, 0);
 	motorSet(rightFront, 0);
-}
-
-/*
- * Launches the launcher once, robot is able to move while reloading as well
- *
- * @param dist how far you want the robot to move after launch, any positive number, if not moving put 0
- * @param reverse if you wish the robot to have a reverse move after launch, insert any value if not moving
- */
-void launchMove(int dist, int reverse){
-	encoderReset(bEnc);
-	encoderReset(bEnc);
-
-	//Default to not running motors
-	int motorRun = 0;
-
-	//Make sure motors run if distance not traveled
-	if(dist != 0){
-		motorRun = 1;
-	}
-
-	//Launch once
-	motorSet(rightLaunch1, -127);
-	motorSet(rightLaunch2, 127);
-	motorSet(rightLaunch3, -127);
-	motorSet(leftLaunch1, 127);
-	motorSet(leftLaunch2, -127);
-	motorSet(leftLaunch3, 127);
-
-	//1 = Launch is happening
-	int limit = 1;
-
-	//Waiting loop
-	while(1){
-		//Start motors once launch has finished
-		if(reverse == 1 && dist != 0 && limit != 1){			//Reverse
-			motorSet(leftBack, 110);
-			motorSet(rightBack, 110);
-			motorSet(leftFront, -110);
-			motorSet(rightFront, -110);
-			motorRun = 1;
-		} else if(reverse == 0 && dist != 0 && limit != 1) {	//Forward
-			motorSet(leftBack, 110);
-			motorSet(rightBack, 110);
-			motorSet(leftFront, -110);
-			motorSet(rightFront, -110);
-			motorRun = 1;
-		}
-
-		//Stop motors once distance is reached
-		if(abs(encoderGet(bEnc)) >= dist && abs(encoderGet(fEnc))){
-			motorSet(leftBack, 0);
-			motorSet(rightBack, 0);
-			motorSet(leftFront, 0);
-			motorSet(rightFront, 0);
-			motorRun = 0;
-			lcdPrint(uart1, 1, "Yes");
-		}
-
-		//Once launch has hit the limit switch stop it
-		if(digitalRead(launcherPosIn) != LOW || limit != 1){ //Limit Switch is not pressed or limit != 1
-			if(digitalRead(launcherPosIn) == LOW){ //Limit Switch is pressed
-				motorSet(rightLaunch1, 0);
-				motorSet(rightLaunch2, 0);
-				motorSet(rightLaunch3, 0);
-				motorSet(leftLaunch1, 0);
-				motorSet(leftLaunch2, 0);
-				motorSet(leftLaunch3, 0);
-			}
-			limit = 0;
-		}
-
-		//Once both have finished break loop and function.
-		if(motorRun != 1 && limit != 1){
-			break;
-		}
-	}
 }
