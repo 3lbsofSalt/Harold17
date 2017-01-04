@@ -52,8 +52,8 @@
  *
  * This task should never exit; it should end with some kind of infinite loop, even if empty.
  */
-Encoder fEnc;
-Encoder bEnc;
+Encoder rEnc;
+Encoder lEnc;
 Encoder liftEnc;
 Encoder clawEnc;
 
@@ -63,234 +63,177 @@ void operatorControl() {
 	lcdSetBacklight(uart1, true);
 
 	if(!liftEnc) {
-		liftEnc = encoderInit(6, 7, 0);
+		liftEnc = encoderInit(6, 7, 1);
 	}
-	if(!bEnc){							//If autonomous did not initialize back encoder
-		bEnc = encoderInit(2, 3, 1);	//Initialize back Encoder
+	if(!lEnc){							//If autonomous did not initialize back encoder
+		lEnc = encoderInit(2, 3, 1);	//Initialize back Encoder
 	}
-	if(!fEnc){							//If autonomous did not initialize front encoder
-		fEnc = encoderInit(4, 5, 1);	//Initialize front Encoder
+	if(!rEnc){							//If autonomous did not initialize front encoder
+		rEnc = encoderInit(4, 5, 1);	//Initialize front Encoder
 	}
-	if(!clawEnc){
-		clawEnc = encoderInit(8, 9, 0);
-	}
-
 	encoderReset(liftEnc);
 
 	int deadzone = 20;					//Joystick deadzone
 	int xAxis;
 	int yAxis;
-	int death = 0;
-	int liftspeed = 0;
+	int liftYAxis;
+	int clawPos = 0;
+
 	//Motor Port Constants
-	const int leftBack = 1;
+	const int leftBack = 9;
 	const int rightBack = 10;
-	const int leftLiftBot = 3;
-	const int leftLiftTop = 4;
-	const int claw = 5;
-	const int farClaw = 6;
-	const int rightLiftTop = 7;
-	const int rightLiftBot = 8;
-	const int rightFront = 9;
+	const int leftCatapultTop = 3;
+	const int leftCatapultBottom = 4;
+	const int leftLift = 5;
+	const int rightLift = 6;
+	const int rightCatapultBottom = 7;
+	const int rightCatapultTop = 8;
+	const int rightFront = 1;
 	const int leftFront = 2;
 
-	float liftHeight = encoderGet(liftEnc);
-	float lift;
+	const int leftSolenoid = 9;
+	const int rightSolenoid = 8;
+
+	const int shotLimit = 1;
+
+	int shooting = 0;
+	int liftMove = 0;
+	int liftInitial = encoderGet(liftEnc);
+	int liftValue = liftInitial;
+
 	/*
 	 * Joy Control Values are A, F, S defaulting to S
 	 * A is for Arcade mode
 	 * F is for a Forward Strafe Mode
 	 * S is for a Sidways Strafe Mode
 	 */
-	int joyControl = 1;
-	//Driver Control Loop
 	while (1) {
 		delay(20);
 
 		//Gets different xAxis and yAxis values for different drive modes
 
-		if(joyControl == 1){		//Arcade Mode
-			yAxis = -(joystickGetAnalog(1, 1));
-			xAxis = -(joystickGetAnalog(1, 2));
+		yAxis = -(joystickGetAnalog(1, 1));
+		xAxis = -(joystickGetAnalog(1, 2));
+		//////////////////////////////////////////////
+		//											//
+		//		   Drive Control Statements			//
+		//											//
+		//////////////////////////////////////////////
+
+		//If controller not out of deadzone stop motors
+		if(abs(xAxis) > deadzone || abs(yAxis) > deadzone) {
+			motorSet(leftBack, -xAxis - yAxis);
+			motorSet(rightBack, xAxis - yAxis);
+			motorSet(leftFront, -xAxis - yAxis);
+			motorSet(rightFront, xAxis - yAxis);
+		} else {
+			motorSet(leftBack, 0);
+			motorSet(rightBack, 0);
+			motorSet(leftFront, 0);
+			motorSet(rightFront, 0);
 		}
-		//////////////////////////////////////////////
-		//																					//
-		//		   Drive Control Statements						//
-		//																					//
-		//////////////////////////////////////////////
-		if(joyControl == 3 || joyControl == 2 || joyControl == 1 || joyControl != 0){
-			//If joystick is pressed out of deadzone
-			if(abs(xAxis) >= deadzone || abs(yAxis) >= deadzone){
-				//Runs Right in SS mode and Up in UD mode
-				if(xAxis > deadzone && !(joyControl == 1)){
-					motorSet(leftBack, -xAxis - yAxis);
-					motorSet(rightBack, -xAxis - yAxis);
-					motorSet(leftFront, xAxis - yAxis);
-					motorSet(rightFront, xAxis - yAxis);
-				//Runs Left in SS mode and Down in UD mode
-				} else if(xAxis < -deadzone && !(joyControl == 1)){
-					motorSet(leftBack, -xAxis + yAxis);
-					motorSet(rightBack, -xAxis + yAxis);
-					motorSet(leftFront, xAxis + yAxis);
-					motorSet(rightFront, xAxis + yAxis);
-				//Runs arcade mode
-				} else if(((abs(xAxis) > deadzone || abs(yAxis) > deadzone) && joyControl == 1)) {
-					motorSet(leftBack, -xAxis - yAxis);
-					motorSet(rightBack, xAxis - yAxis);
-					motorSet(leftFront, -xAxis - yAxis);
-					motorSet(rightFront, xAxis - yAxis);
-				//Runs Up/Down in SS and Left/Right in UD
-				} else {
-					if(!(joyControl == 1)){
-						motorSet(leftBack, yAxis);
-						motorSet(rightBack, yAxis);
-						motorSet(leftFront, yAxis);
-						motorSet(rightFront, yAxis);
-					}
-				}
-			//If controller not out of deadzone stop motors
+
+		///Catapult
+
+		if(joystickGetDigital(1, 6, JOY_UP)){
+			shooting = 1;
+		}
+
+		if(shooting == 1 && !joystickGetDigital(1, 6, JOY_DOWN)){
+			motorSet(leftCatapultTop, 127);
+			motorSet(leftCatapultBottom, 127);
+			motorSet(rightCatapultTop, -127);
+			motorSet(rightCatapultBottom, -127);
+			if(digitalRead(shotLimit) == LOW){
+				shooting = 0;
+			}
+		} else {
+			shooting = 0;
+			if(joystickGetDigital(1, 8, JOY_UP)){
+				motorSet(leftCatapultTop, 127);
+				motorSet(leftCatapultBottom, 127);
+				motorSet(rightCatapultTop, -127);
+				motorSet(rightCatapultBottom, -127);
+			} else if(joystickGetDigital(1, 8, JOY_RIGHT)){
+				motorSet(leftCatapultTop, -127);
+				motorSet(leftCatapultBottom, -127);
+				motorSet(rightCatapultTop, 127);
+				motorSet(rightCatapultBottom, 127);
 			} else {
-				motorSet(leftBack, 0);
-				motorSet(rightBack, 0);
-				motorSet(leftFront, 0);
-				motorSet(rightFront, 0);
+				motorSet(leftCatapultTop, 0);
+				motorSet(leftCatapultBottom, 0);
+				motorSet(rightCatapultTop, 0);
+				motorSet(rightCatapultBottom, 0);
 			}
-		//Extra slot for another drive mode
-		} else if (joyControl == 0) {
-
 		}
 
+		///////////////LIFT
+		if(joystickGetDigital(1, 7, JOY_UP)){
+			liftMove = 1;
+			liftValue = 80;
+		} else if(joystickGetDigital(1, 7, JOY_LEFT)){
+			liftMove = 1;
+			liftValue = 60; //Barely below highest lifting value;
+		} else if(joystickGetDigital(1, 7, JOY_DOWN)){
+			liftMove = 1;
+			liftValue = liftInitial;
+		}
 
-		//////////////////////////////////////
-		//									//
-		//	 	 Lift Statements 			//
-		//									//
-		//////////////////////////////////////
+		liftYAxis = joystickGetAnalog(1, 3);
 
-		lift = joystickGetAnalog(1, 3);
-		if(abs(lift) > deadzone) {
-			motorSet(leftLiftBot, lift);
-			motorSet(leftLiftTop, lift);
-			motorSet(rightLiftBot, -(lift));
-			motorSet(rightLiftTop, -(lift));
-			liftHeight = encoderGet(liftEnc) -2;
-		} else if(encoderGet(liftEnc) < liftHeight) {
-			motorSet(leftLiftBot, liftspeed);
-			motorSet(leftLiftTop, liftspeed);
-			motorSet(rightLiftBot, -liftspeed);
-			motorSet(rightLiftTop, -liftspeed);
-			death++;
-			if((death % 50 == 0) && liftspeed < 110){
-				liftspeed += 20;
+		if(liftMove == 1 && !(abs(liftYAxis) > deadzone)){
+			if(encoderGet(liftEnc) < liftValue+3){
+				motorSet(leftLift, 127);
+				motorSet(rightLift, -127);
+			} else if(encoderGet(liftEnc) > liftValue-3){
+				motorSet(leftLift, -127);
+				motorSet(rightLift, 127);
+			} else {
+				motorSet(leftLift, 0);
+				motorSet(rightLift, 0);
 			}
 		} else {
-			death = 0;
-			liftspeed = 30;
-			motorSet(leftLiftBot, 0);
-			motorSet(leftLiftTop, 0);
-			motorSet(rightLiftBot, 0);
-			motorSet(rightLiftTop, 0);
-		}
-
-
-		if(joystickGetDigital(1, 6, JOY_UP)){ //Open
-			motorSet(claw, 127);
-		} else if(joystickGetDigital(1, 6, JOY_DOWN)){
-			motorSet(claw, -127);
-		} else {
-			motorSet(claw, 0);
-		}
-
-		if(joystickGetDigital(1, 5, JOY_UP)){
-			motorSet(farClaw, -127);
-		} else if(joystickGetDigital(1, 5, JOY_DOWN)) {
-			motorSet(farClaw, 127);
-		} else {
-			motorSet(farClaw, 0);
-		}
-
-		lcdPrint(uart1, 1, "liftspeed: %d", liftspeed);
-		lcdPrint(uart1, 2, "Claw %d", encoderGet(clawEnc));
-
-		//lift is joystick value
-		//liftHeight is where the joystick sets the lift to be
-		//liftspeed is how fast it is lifting
-		//death is a counter for the if statement
-		/*lift = joystickGetAnalog(1, 3);
-
-
-
-		if(abs(lift) > deadzone) {
-			liftHeight += floor((lift/10));
-		}
-1
-		if (encoderGet(liftEnc) < liftHeight) {
-			if(death == 0){
-				death = 1;
+			liftMove = 0;
+			if(abs(liftYAxis) > deadzone){
+				motorSet(leftLift, liftYAxis);
+				motorSet(rightLift, -liftYAxis);
+			} else {
+				motorSet(leftLift, 0);
+				motorSet(rightLift, 0);
 			}
-			motorSet(leftLiftBot, liftspeed);
-			motorSet(leftLiftTop, liftspeed);
-			motorSet(rightLiftBot, -liftspeed);
-			motorSet(rightLiftTop, -liftspeed);
-		} else if(encoderGet(liftEnc) > liftHeight) {
-			if(death == 0){
-				death = 1;
-			}
-			motorSet(leftLiftBot, -liftspeed);
-			motorSet(leftLiftTop, -liftspeed);
-			motorSet(rightLiftBot, liftspeed);
-			motorSet(rightLiftTop, liftspeed);
-		} else {
-			death = 0;
-			liftspeed = 0;
-			motorSet(leftLiftBot, 0);
-			motorSet(leftLiftTop, 0);
-			motorSet(rightLiftBot, 0);
-			motorSet(rightLiftTop, 0);
 		}
 
-		if(death != 0){
-			if((death % 100 == 0) && liftspeed < 130){
-				liftspeed += 10;
-			}
-			death++;
+		lcdPrint(uart1, 2, "BLEH");
+		lcdPrint(uart1, 1, "Lift: %d", encoderGet(liftEnc));
+
+		if(joystickGetDigital(1, 5, JOY_UP) && clawPos == 0){
+			clawPos = 1;
+			digitalWrite(leftSolenoid, LOW);
+			digitalWrite(rightSolenoid, LOW);
+			delay(200);
+		} else if(joystickGetDigital(1, 5, JOY_DOWN) ||(joystickGetDigital(1, 5, JOY_UP) && clawPos == 1)){
+			clawPos = 0;
+			digitalWrite(leftSolenoid, HIGH);
+			digitalWrite(rightSolenoid, HIGH);
+			delay(200);
 		}
 
-
-
-		lcdPrint(uart1, 1, "liftspeed: %d", liftHeight);
-		lcdPrint(uart1, 2, "encoderget %d", encoderGet(liftEnc));
-
-		lift = joystickGetAnalog(1, 3);
-		if(abs(lift) > deadzone){
-			motorSet(leftLiftBot, lift/2);
-			motorSet(leftLiftTop, lift/2);
-			motorSet(rightLiftBot, -(lift/2));
-			motorSet(rightLiftTop, -(lift/ 2));
-		} else {
-			motorSet(leftLiftBot, 0);
-			motorSet(leftLiftTop, 0);
-			motorSet(rightLiftBot, 0);
-			motorSet(rightLiftTop, 0);
-		}
-		*/
 		//////////////////////////////////////
 		//									//
 		//			Extra Features			//
 		//									//
 		//////////////////////////////////////
-		if(joystickGetDigital(1, 7, JOY_UP)){
-			if(joystickGetDigital(1, 7, JOY_RIGHT)){ //Press up and right on left buttons
+		if(joystickGetDigital(1, 8, JOY_LEFT)){
+			if(joystickGetDigital(1, 8, JOY_UP)){ //Press up and right on left buttons
 				//Reset encoders
-				encoderReset(fEnc);
-				encoderReset(bEnc);
+				encoderReset(rEnc);
+				encoderReset(lEnc);
 			}
-			if(joystickGetDigital(1, 7, JOY_LEFT)){ //Press up and left on left buttons
+			if(joystickGetDigital(1, 8, JOY_DOWN)){ //Press up and left on left buttons
 				//Start autonomous
 				autonomous();
 			}
 		}
-
 
 	}
 }
