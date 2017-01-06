@@ -49,152 +49,99 @@
  * so, the robot will await a switch to another mode or disable/enable cycle.
  */
 
-//Encoder Globals
-Encoder rEnc;
-Encoder lEnc;
-Encoder liftEnc;
-Encoder clawEnc;
-//Limit Switch Constant
-const int launcherPosIn = 1;
+
 
 //Motor Port Constants
-const int leftBack = 9;
-const int rightBack = 10;
-const int leftCatapultTop = 3;
-const int leftCatapultBottom = 4;
-const int leftLift = 5;
-const int rightLift = 6;
-const int rightCatapultBottom = 7;
-const int rightCatapultTop = 8;
-const int rightFront = 1;
-const int leftFront = 2;
+const int rightBackDrive = 10;
+const int rightFrontDrive = 9;
+const int rightLiftInner = 8;
+const int rightLiftOuter = 7;
+const int rightClaw = 6;
+const int leftClaw = 5;
+const int leftLiftOuter = 4;
+const int leftLiftInner = 3;
+const int leftFrontDrive = 2;
+const int leftBackDrive = 1;
 
-const int leftSolenoid = 9;
-const int rightSolenoid = 8;
-
-const int shotLimit = 1;
+const int clawPot = 1;
 
 //////////////////////////
 // Function Prototypes	//
 //////////////////////////
 void move();
 void turn();
+void PID();
 void lift();
-void launch();
-void claw();
 
+//lift globals
+int liftHeight;
+int currHeight;
+int liftSpeed;
+
+//Encoder Globals
+Encoder rEnc;
+Encoder lEnc;
+Encoder liftEnc;
+Encoder clawEnc;
 
 void autonomous() {
 
+	lcdInit(uart1);
+	lcdSetBacklight(uart1, true);
 
 	//Initalize encoders if not already set
 	if(!lEnc){
-		lEnc = encoderInit(2, 3, 1);
+		lEnc = encoderInit(1, 2, 0);
 	}
 	if(!rEnc){
-		rEnc = encoderInit(4, 5, 1);
+		rEnc = encoderInit(3, 4, 0);
 	}
 	if(!liftEnc) {
-		liftEnc = encoderInit(6, 7, 0);
-	}
-	if(!clawEnc){
-		clawEnc = encoderInit(8, 9, 0);
+		liftEnc = encoderInit(5, 6, 0);
 	}
 
 	//Reset after initialization
 	encoderReset(lEnc);
 	encoderReset(rEnc);
 
+	liftHeight = encoderGet(liftEnc);
 
-	lift(120);
-	motorSet(leftLift, 50);
-	motorSet(rightLift, -50);
-	move(760, 1);
-	delay(3000);
-	motorSet(leftLift, 0);
-	motorSet(rightLift, 0);
-}
+	turn(50, 0);
 
-void claw(int posit) {
-	if(posit == 1){
-		digitalWrite(leftSolenoid, LOW);
-		digitalWrite(rightSolenoid, LOW);
-	} else if(posit == 0) {
-		digitalWrite(leftSolenoid, HIGH);
-		digitalWrite(rightSolenoid, HIGH);
-	}
-}
-
-void launch() {
-	motorSet(leftCatapultTop, -127);
-	motorSet(leftCatapultBottom, -127);
-	motorSet(rightCatapultTop, 127);
-	motorSet(rightCatapultBottom, 127);
-
-	while(1){
-		if(digitalRead(shotLimit) == LOW){
-			break;
-		}
-	}
-
-	motorSet(leftCatapultTop, 0);
-	motorSet(leftCatapultBottom, 0);
-	motorSet(rightCatapultTop, 0);
-	motorSet(rightCatapultBottom, 0);
 }
 
 /**
+ * turn()
  * Turns Robot
  *
  * @param dist is distance in turn
  * @param dir is direction 1 is left and 0 right default right
  */
 void turn(int dist, int dir){
-	lcdPrint(uart1, 1, "DA!");
 	encoderReset(lEnc);
 	encoderReset(rEnc);
-	lcdPrint(uart1, 1, "%d", dir);
 	if(dir == 1){
-		motorSet(leftBack, 110);
-		motorSet(rightBack, 110);
-		motorSet(leftFront, 110);
-		motorSet(rightFront, 110);
+		motorSet(leftBackDrive, 110);
+		motorSet(rightBackDrive, 110);
+		motorSet(leftFrontDrive, 110);
+		motorSet(rightFrontDrive, 110);
 	} else if(dir !=  1) {
-		motorSet(leftBack, -110);
-		motorSet(rightBack, -110);
-		motorSet(leftFront, -110);
-		motorSet(rightFront, -110);
+		motorSet(leftBackDrive, -110);
+		motorSet(rightBackDrive, -110);
+		motorSet(leftFrontDrive, -110);
+		motorSet(rightFrontDrive, -110);
 	}
 	while(encoderGet(lEnc) <= dist && encoderGet(rEnc) <= dist){
 		lcdPrint(uart1, 1, "B:%d", encoderGet(lEnc));
 	}
-	motorSet(leftBack, 0);
-	motorSet(rightBack, 0);
-	motorSet(leftFront, 0);
-	motorSet(rightFront, 0);
+	motorSet(leftBackDrive, 0);
+	motorSet(rightBackDrive, 0);
+	motorSet(leftFrontDrive, 0);
+	motorSet(rightFrontDrive, 0);
 }
-
-void lift(int height) {
-	if(encoderGet(liftEnc) < height){
-		motorSet(leftLift, 127);
-		motorSet(rightLift, -127);
-		while(encoderGet(liftEnc) < height){
-
-		}
-	} else if(encoderGet(liftEnc) > height){
-		motorSet(leftLift, -127);
-		motorSet(rightLift, 127);
-		while(encoderGet(liftEnc) > height){
-
-		}
-	}
-	motorSet(leftLift, 0);
-	motorSet(rightLift, 0);
-}
-
-
 
 /**
+ * move()
  * Moves the robot forward or reverse for a set distance
  *
  * @param dist the distance in encoder ticks that the robot will travel
@@ -206,28 +153,72 @@ void move(int dist, int reverse){
 
 	//Forward/Reverse statements
 	if(reverse == 1){ 	//Reverse
-		motorSet(leftBack, -110);
-		motorSet(rightBack, 110);
-		motorSet(leftFront, -110);
-		motorSet(rightFront, 110);
+		motorSet(leftBackDrive, -110);
+		motorSet(rightBackDrive, 110);
+		motorSet(leftFrontDrive, -110);
+		motorSet(rightFrontDrive, 110);
 	}else {				//Forward
-		motorSet(leftBack, 110);
-		motorSet(rightBack, -110);
-		motorSet(leftFront, 110);
-		motorSet(rightFront, -110);
+		motorSet(leftBackDrive, 110);
+		motorSet(rightBackDrive, -110);
+		motorSet(leftFrontDrive, 110);
+		motorSet(rightFrontDrive, -110);
 	}
 
+
 	//Run while distance is being traveled
-	while(1) {
-		//Break waiting Loop when distance is reached
-		if(abs(encoderGet(lEnc)) >= dist || abs(encoderGet(rEnc)) >= dist){
-			break;
-		}
+	while(encoderGet(lEnc) <= dist && encoderGet(rEnc) <= dist) {
+		lcdPrint(uart1, 1, "Left: %d", encoderGet(lEnc));
+		lcdPrint(uart1, 2, "Right: %d", encoderGet(rEnc));
 	}
 
 	//Stop
-	motorSet(leftBack, 0);
-	motorSet(rightBack, 0);
-	motorSet(leftFront, 0);
-	motorSet(rightFront, 0);
+	motorSet(leftBackDrive, 0);
+	motorSet(rightBackDrive, 0);
+	motorSet(leftFrontDrive, 0);
+	motorSet(rightFrontDrive, 0);
+}
+
+/**
+ * PID()
+ * Controls the lift through a PID funtion.
+ * Insert into every user function
+ */
+void PID() {
+	currHeight = encoderGet(liftEnc);
+
+	if(currHeight < liftHeight){
+
+	}
+}
+
+/**
+ * lift()
+ * Moves the lift, and changes the value that PID() uses to control the position
+ *
+ * @param height denotes the height, in encoder ticks, that the lift will go to.
+ */
+void lift(int height) {
+	liftHeight = height;
+	if(encoderGet(liftEnc) < height) {
+		motorSet(leftLiftInner, 110);
+		motorSet(leftLiftOuter, -110);
+		motorSet(rightLiftInner, -110);
+		motorSet(rightLiftOuter, 110);
+		while(encoderGet(liftEnc) < height) {
+
+		}
+	} else if (encoderGet(liftEnc) > height) {
+		motorSet(leftLiftInner, -110);
+		motorSet(leftLiftOuter, 110);
+		motorSet(rightLiftInner, 110);
+		motorSet(rightLiftOuter, -110);
+		while(encoderGet(liftEnc) > height){
+
+		}
+	}
+
+	motorSet(leftLiftInner, 0);
+	motorSet(leftLiftOuter, 0);
+	motorSet(rightLiftInner, 0);
+	motorSet(rightLiftOuter, 0);
 }
